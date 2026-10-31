@@ -1,0 +1,272 @@
+/*
+ * Theme for react-calendar-timeline. The library ships unlayered CSS with
+ * opinionated colours (red header, dark grid); these rules restyle it with
+ * the app's design tokens. Loads themselves are rendered by LoadItem.
+ */
+
+.dispatch-timeline .react-calendar-timeline {
+  --grid-line: color-mix(in oklch, var(--border) 75%, transparent);
+  --section-bg: oklch(0.935 0.012 265);
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+/* Header: white, sticky below the app chrome. */
+.dispatch-timeline .react-calendar-timeline .rct-header-root {
+  position: sticky;
+  top: var(--timeline-sticky-top, 0px);
+  z-index: 40;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-calendar-header {
+  border: 0;
+}
+
+.dispatch-timeline .timeline-interval {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-left: 1px solid var(--grid-line);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background-color 120ms ease;
+}
+
+.dispatch-timeline .timeline-interval:hover {
+  background: var(--muted);
+}
+
+.dispatch-timeline .timeline-interval--primary {
+  border-bottom: 1px solid var(--grid-line);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.dispatch-timeline .timeline-interval--secondary {
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dispatch-timeline .timeline-interval__label {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.dispatch-timeline .timeline-interval--secondary .timeline-interval__label {
+  margin-left: 0;
+  padding: 0;
+}
+
+.dispatch-timeline .timeline-interval--today .timeline-interval__label {
+  background: color-mix(in oklch, var(--brand-sky) 22%, transparent);
+  color: var(--brand-navy);
+}
+
+/* Sidebar */
+.dispatch-timeline .react-calendar-timeline .rct-sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--card);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-sidebar .rct-sidebar-row {
+  padding: 0;
+  border-bottom: 1px solid var(--grid-line);
+  background: transparent;
+  line-height: normal !important;
+}
+
+/* Grid */
+.dispatch-timeline .react-calendar-timeline .rct-horizontal-lines .rct-hl-even,
+.dispatch-timeline .react-calendar-timeline .rct-horizontal-lines .rct-hl-odd {
+  background: transparent;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-horizontal-lines .rct-section-row {
+  background: var(--section-bg);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-vertical-lines .rct-vl {
+  border-left: 1px solid var(--grid-line);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-vertical-lines .rct-vl.rct-vl-first {
+  border-left: 1px solid color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+.dispatch-timeline .react-calendar-timeline .rct-vertical-lines .rct-vl.rct-day-6,
+.dispatch-timeline .react-calendar-timeline .rct-vertical-lines .rct-vl.rct-day-0 {
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+}
+
+/* Time that has passed is read-only, so it is visibly muted. */
+.dispatch-timeline .react-calendar-timeline .rct-vertical-lines .rct-vl.rct-past {
+  background-color: color-mix(in oklch, var(--muted) 85%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    color-mix(in oklch, var(--foreground) 3.5%, transparent) 7px 8px
+  );
+}
+
+/* Markers */
+.dispatch-timeline .now-marker {
+  background: var(--brand-sky);
+  z-index: 60;
+}
+
+.dispatch-timeline .now-marker::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--brand-sky);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-sky) 30%, transparent);
+}
+
+.dispatch-timeline .cursor-marker {
+  border-left: 1px dashed color-mix(in oklch, var(--foreground) 35%, transparent);
+  z-index: 55;
+}
+
+/* Loads */
+.dispatch-timeline .load-item {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--load-accent) 45%, transparent);
+  border-radius: 14px;
+  background: var(--load-bg);
+  color: var(--load-fg);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--brand-navy) 8%, transparent);
+  transition:
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.dispatch-timeline .load-item:hover {
+  box-shadow: 0 4px 14px -6px color-mix(in oklch, var(--brand-navy) 35%, transparent);
+}
+
+.dispatch-timeline .load-item__content {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 12px;
+  line-height: 1.2;
+}
+
+.dispatch-timeline .load-item__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dispatch-timeline .load-item__meta {
+  font-size: 11px;
+  opacity: 0.78;
+  white-space: nowrap;
+}
+
+.dispatch-timeline .load-item__progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in oklch, var(--load-accent) 32%, transparent);
+  pointer-events: none;
+}
+
+.dispatch-timeline .load-item.is-draft {
+  border-style: dashed;
+  border-color: var(--load-accent);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--load-bg) 0 8px,
+    color-mix(in oklch, var(--load-bg) 55%, white) 8px 16px
+  );
+}
+
+.dispatch-timeline .load-item.is-delivered {
+  opacity: 0.6;
+  filter: saturate(0.55);
+}
+
+.dispatch-timeline .load-item.is-missed {
+  border: 1.5px dashed var(--destructive);
+}
+
+/* Short loads at wide zoom levels: colour only, details stay in the tooltip. */
+.dispatch-timeline .load-item.is-compact {
+  border-radius: 8px;
+}
+
+.dispatch-timeline .load-item.is-compact .load-item__content {
+  display: none;
+}
+
+.dispatch-timeline .load-item.is-narrow .load-item__meta {
+  display: none;
+}
+
+.dispatch-timeline .load-item.is-locked {
+  cursor: default !important;
+}
+
+.dispatch-timeline .load-item.is-dimmed {
+  opacity: 0.22;
+}
+
+.dispatch-timeline .load-item.is-selected {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--ring),
+    0 8px 20px -8px color-mix(in oklch, var(--brand-navy) 45%, transparent);
+  opacity: 1;
+}
+
+.dispatch-timeline .load-item.has-problem {
+  border: 1.5px solid var(--destructive);
+  background: color-mix(in oklch, var(--destructive) 14%, var(--card));
+  color: var(--destructive);
+}
+
+.dispatch-timeline .live-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--load-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--load-accent) 60%, transparent);
+  animation: live-pulse 2s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dispatch-timeline .live-dot {
+    animation: none;
+  }
+}
