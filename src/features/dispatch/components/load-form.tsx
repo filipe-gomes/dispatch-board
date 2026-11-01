@@ -257,7 +257,8 @@ export function LoadForm({
             <FieldError>{errorFor("driverId")}</FieldError>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* One row each: a date plus a time doesn't fit in half of the dialog. */}
+          <div className="grid grid-cols-1 gap-4">
             <Field data-invalid={!!errorFor("start")}>
               <FieldLabel htmlFor="load-start">Start</FieldLabel>
               <DateTimeField
