@@ -4,7 +4,17 @@ import "react-calendar-timeline/style.css";
 import "./timeline.css";
 
 import type { Dayjs } from "dayjs";
-import { type CSSProperties, type DragEvent, memo, useCallback, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type DragEvent,
+  memo,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Timeline, {
   CursorMarker,
   DateHeader,
@@ -17,9 +27,9 @@ import Timeline, {
 } from "react-calendar-timeline";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatTime } from "../domain/format";
-import type { ScheduleIndex } from "../domain/schedule";
-import { snapNearest } from "../domain/time";
+import { formatDuration, formatTime, formatTimeRange } from "../domain/format";
+import { findConflict, type ScheduleIndex, type TimeSlot } from "../domain/schedule";
+import { nextBookableStart, snapNearest } from "../domain/time";
 import type { Driver, DriverId, Load, LoadId, Terminal, TerminalId } from "../domain/types";
 import { MAX_ZOOM, MIN_ZOOM, type TimelineView } from "../domain/view";
 import { useStableCallback } from "../state/use-stable-callback";
@@ -30,6 +40,8 @@ import {
   buildGroups,
   buildItems,
   clampGesture,
+  dragWindow,
+  type DriverGroup,
   ITEM_HEIGHT_RATIO,
   LINE_HEIGHT,
   type LoadItem,
@@ -59,6 +71,8 @@ export interface DispatchTimelineProps {
   onSelect: (id: LoadId | null) => void;
   onOpen: (id: LoadId) => void;
   onCreateAt: (driverId: DriverId, time: number) => void;
+  /** A window dragged across empty time in a driver's row. */
+  onCreateBetween: (driverId: DriverId, start: number, end: number) => void;
   onMove: (id: LoadId, start: number, driverId: DriverId) => void;
   onResize: (id: LoadId, edge: "left" | "right", time: number) => void;
   onQueueDrop: (id: LoadId, driverId: DriverId, start: number) => void;
@@ -71,6 +85,42 @@ interface DropTarget {
   label: string;
   problem: string | null;
 }
+
+/** A row of the canvas; `top` is measured from the top of the first row. */
+interface Row {
+  group: BoardGroup;
+  top: number;
+  height: number;
+}
+
+type DriverRow = Row & { group: DriverGroup };
+
+/** The visible canvas, and the wrapper the previews are positioned in. */
+interface Geometry {
+  scroll: DOMRect;
+  container: DOMRect;
+}
+
+/** A press on empty space in a driver's row. It becomes a drag once the pointer travels. */
+interface Press {
+  pointerId: number;
+  x: number;
+  time: number;
+  row: DriverRow;
+  dragging: boolean;
+  /** Aborting removes every window listener the press added. */
+  listeners: AbortController;
+}
+
+interface DragSelection {
+  slot: TimeSlot;
+  style: CSSProperties;
+  label: string;
+  problem: string | null;
+}
+
+/** Pixels the pointer travels before a press becomes a drag, so clicks and double-clicks still work. */
+const DRAG_THRESHOLD = 5;
 
 const sectionRowClass = (group: BoardGroup) => (group.kind === "section" ? ["rct-section-row"] : []);
 
@@ -219,6 +269,7 @@ export function DispatchTimeline({
   onSelect,
   onOpen,
   onCreateAt,
+  onCreateBetween,
   onMove,
   onResize,
   onQueueDrop,
@@ -254,43 +305,62 @@ export function DispatchTimeline({
     onResize(String(id), edge, time)
   );
 
+  const measure = (): Geometry | null => {
+    const scroll = scrollElement.current?.getBoundingClientRect();
+    const container = wrapper.current?.getBoundingClientRect();
+    return scroll && container ? { scroll, container } : null;
+  };
+
+  /** The time under a horizontal position, pinned to the visible range. */
+  const timeAt = ({ scroll }: Geometry, clientX: number) => {
+    const x = Math.min(Math.max(clientX, scroll.left), scroll.right);
+    return view.start + ((x - scroll.left) / scroll.width) * (view.end - view.start);
+  };
+
+  const rowAt = ({ scroll }: Geometry, clientY: number): Row | null => {
+    let top = 0;
+    for (const group of groups) {
+      const height = group.height ?? LINE_HEIGHT;
+      if (clientY - scroll.top < top + height) return { group, top, height };
+      top += height;
+    }
+    return null;
+  };
+
+  /** Where a load-shaped preview of `start`–`end` sits over a row, in the wrapper's coordinates. */
+  const previewStyle = ({ scroll, container }: Geometry, row: Row, start: number, end: number): CSSProperties => {
+    const span = view.end - view.start;
+    const itemHeight = LINE_HEIGHT * ITEM_HEIGHT_RATIO;
+    return {
+      left: scroll.left - container.left + ((start - view.start) / span) * scroll.width,
+      top: scroll.top - container.top + row.top + (row.height - itemHeight) / 2,
+      width: Math.max(24, ((end - start) / span) * scroll.width),
+      height: itemHeight,
+    };
+  };
+
   // Dragging a load in from the unassigned queue (native HTML drag and drop).
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
   const locateDrop = (event: DragEvent): DropTarget | null => {
-    const scroll = scrollElement.current?.getBoundingClientRect();
-    const container = wrapper.current?.getBoundingClientRect();
-    if (!queueDrag || !scroll || !container) return null;
+    const geometry = measure();
+    if (!queueDrag || !geometry) return null;
     const { clientX, clientY } = event;
+    const { scroll } = geometry;
     if (clientX < scroll.left || clientX > scroll.right || clientY < scroll.top || clientY > scroll.bottom) return null;
+    const row = rowAt(geometry, clientY);
+    if (!row) return null;
 
-    const span = view.end - view.start;
-    const start = snapNearest(view.start + ((clientX - scroll.left) / scroll.width) * span);
-    const duration = queueDrag.end - queueDrag.start;
-    let rowTop = 0;
-    for (const group of groups) {
-      const rowHeight = group.height ?? LINE_HEIGHT;
-      if (clientY - scroll.top < rowTop + rowHeight) {
-        const driverId = group.kind === "driver" ? group.id : null;
-        const itemHeight = LINE_HEIGHT * ITEM_HEIGHT_RATIO;
-        return {
-          driverId,
-          start,
-          label: driverId ? `${group.title} · ${formatTime(start)}` : "Drop on a driver's row",
-          problem: driverId
-            ? checkSlot({ id: queueDrag.id, driverId, start, end: start + duration })
-            : "Drop on a driver's row",
-          style: {
-            left: scroll.left - container.left + ((start - view.start) / span) * scroll.width,
-            top: scroll.top - container.top + rowTop + (rowHeight - itemHeight) / 2,
-            width: Math.max(24, (duration / span) * scroll.width),
-            height: itemHeight,
-          },
-        };
-      }
-      rowTop += rowHeight;
-    }
-    return null;
+    const start = snapNearest(timeAt(geometry, clientX));
+    const end = start + (queueDrag.end - queueDrag.start);
+    const driverId = row.group.kind === "driver" ? row.group.id : null;
+    return {
+      driverId,
+      start,
+      label: driverId ? `${row.group.title} · ${formatTime(start)}` : "Drop on a driver's row",
+      problem: driverId ? checkSlot({ id: queueDrag.id, driverId, start, end }) : "Drop on a driver's row",
+      style: previewStyle(geometry, row, start, end),
+    };
   };
 
   const handleDragOver = (event: DragEvent) => {
@@ -316,6 +386,94 @@ export function DispatchTimeline({
     if (!wrapper.current?.contains(event.relatedTarget as Node | null)) setDropTarget(null);
   };
 
+  // Dragging across empty time in a driver's row draws the window for a new load.
+  const press = useRef<Press | null>(null);
+  const [selection, setSelection] = useState<DragSelection | null>(null);
+
+  const describeSelection = (geometry: Geometry, row: DriverRow, slot: TimeSlot): DragSelection => {
+    const conflict = findConflict(schedules.get(row.group.id), slot);
+    return {
+      slot,
+      style: previewStyle(geometry, row, slot.start, slot.end),
+      label: `${formatTimeRange(slot.start, slot.end)} · ${formatDuration(slot.end - slot.start)}`,
+      problem: conflict ? `Overlaps ${conflict.title}` : null,
+    };
+  };
+
+  const endPress = () => {
+    press.current?.listeners.abort();
+    press.current = null;
+    setSelection(null);
+  };
+
+  const trackPress = useStableCallback((event: PointerEvent) => {
+    const current = press.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    // The press is ours, so the library must not pan the board underneath it.
+    event.stopPropagation();
+    if (!current.dragging && Math.abs(event.clientX - current.x) < DRAG_THRESHOLD) return;
+    current.dragging = true;
+    const geometry = measure();
+    if (!geometry) return;
+    const slot = dragWindow(current.time, timeAt(geometry, event.clientX), nextBookableStart(Date.now()));
+    setSelection((shown) =>
+      shown?.slot.start === slot.start && shown.slot.end === slot.end
+        ? shown
+        : describeSelection(geometry, current.row, slot)
+    );
+  });
+
+  const releasePress = useStableCallback((event: PointerEvent) => {
+    const current = press.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    const geometry = current.dragging ? measure() : null;
+    endPress();
+    if (!geometry) return;
+    const { start, end } = dragWindow(current.time, timeAt(geometry, event.clientX), nextBookableStart(Date.now()));
+    onCreateBetween(current.row.group.id, start, end);
+  });
+
+  const cancelPress = useStableCallback(endPress);
+
+  const cancelOnEscape = useStableCallback((event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !press.current?.dragging) return;
+    // Only the drag is cancelled; the selected load stays selected.
+    event.stopPropagation();
+    endPress();
+  });
+
+  const handlePointerDown = (event: ReactPointerEvent) => {
+    // Touch keeps panning and pinch-zooming the board; drawing a window is for mouse and pen.
+    if (event.pointerType === "touch" || event.button !== 0 || event.ctrlKey || event.metaKey) return;
+    const target = event.target as Element;
+    if (!scrollElement.current?.contains(target) || target.closest(".rct-item")) return;
+    const geometry = measure();
+    const row = geometry && rowAt(geometry, event.clientY);
+    if (!geometry || !row || row.group.kind !== "driver") return;
+
+    endPress();
+    const listeners = new AbortController();
+    press.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      time: timeAt(geometry, event.clientX),
+      row: { ...row, group: row.group },
+      dragging: false,
+      listeners,
+    };
+    const options = { capture: true, signal: listeners.signal };
+    window.addEventListener("pointermove", trackPress, options);
+    window.addEventListener("pointerup", releasePress, options);
+    window.addEventListener("pointercancel", cancelPress, options);
+    window.addEventListener("keydown", cancelOnEscape, options);
+    window.addEventListener("blur", cancelPress, options);
+  };
+
+  // A press's window listeners must not outlive the timeline.
+  useEffect(() => () => press.current?.listeners.abort(), []);
+
+  const preview = queueDrag && dropTarget ? dropTarget : selection;
+
   return (
     <div
       ref={wrapper}
@@ -324,6 +482,7 @@ export function DispatchTimeline({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onPointerDown={handlePointerDown}
     >
       <CheckSlotContext.Provider value={checkSlot}>
         <TimelineCanvas
@@ -345,18 +504,18 @@ export function DispatchTimeline({
           onItemResize={handleItemResize}
         />
       </CheckSlotContext.Provider>
-      {queueDrag && dropTarget && (
+      {preview && (
         <div
           aria-hidden
           className={cn(
             "pointer-events-none absolute z-50 flex items-center rounded-[14px] border-2 border-dashed px-3 text-xs font-semibold whitespace-nowrap shadow-lg",
-            dropTarget.problem
+            preview.problem
               ? "border-destructive bg-destructive/15 text-destructive"
               : "border-brand-sky bg-brand-sky/25 text-brand-navy"
           )}
-          style={dropTarget.style}
+          style={preview.style}
         >
-          {dropTarget.problem ?? dropTarget.label}
+          {preview.problem ?? preview.label}
         </div>
       )}
     </div>

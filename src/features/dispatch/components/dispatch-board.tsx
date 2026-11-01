@@ -170,14 +170,22 @@ export function DispatchBoard() {
     [schedules, state.defaults, state.drivers]
   );
 
+  /** A new load for one driver and window, with the default volume or as much as their truck holds. */
+  const createBetween = useCallback(
+    (driverId: DriverId, start: number, end: number) => {
+      const capacity = driversById.get(driverId)?.capacityGallons ?? DEFAULT_GALLONS;
+      openCreate({ driverId, start, end, gallons: Math.min(DEFAULT_GALLONS, capacity) });
+    },
+    [driversById, openCreate]
+  );
+
   const createAt = useCallback(
     (driverId: DriverId, time: number) => {
       const from = Math.max(time, nextBookableStart(Date.now()));
       const start = findNextOpenStart(schedules.get(driverId), DEFAULT_DURATION, from);
-      const capacity = driversById.get(driverId)?.capacityGallons ?? DEFAULT_GALLONS;
-      openCreate({ driverId, start, end: start + DEFAULT_DURATION, gallons: Math.min(DEFAULT_GALLONS, capacity) });
+      createBetween(driverId, start, start + DEFAULT_DURATION);
     },
-    [driversById, openCreate, schedules]
+    [createBetween, schedules]
   );
 
   const openEditor = useCallback((loadId: LoadId) => setEditor({ mode: "edit", key: crypto.randomUUID(), loadId }), []);
@@ -387,6 +395,7 @@ export function DispatchBoard() {
               onSelect={setSelectedId}
               onOpen={openEditor}
               onCreateAt={createAt}
+              onCreateBetween={createBetween}
               onMove={moveLoad}
               onResize={resizeLoad}
               onQueueDrop={handleQueueDrop}

@@ -1,9 +1,9 @@
 import type { TimelineGroupBase, TimelineItemBase, TimelineKeys } from "react-calendar-timeline";
 import { formatGallons, formatWindow } from "../domain/format";
 import { isLocked, MAX_LOAD_DURATION } from "../domain/rules";
-import type { ScheduleIndex } from "../domain/schedule";
+import type { ScheduleIndex, TimeSlot } from "../domain/schedule";
 import { getLoadState, type LoadState, resolveSupply, type SupplyPlan } from "../domain/status";
-import { nextBookableStart, SNAP } from "../domain/time";
+import { nextBookableStart, SNAP, snapNearest } from "../domain/time";
 import {
   type Driver,
   type DriverId,
@@ -155,4 +155,21 @@ export function clampGesture(
     return Math.min(Math.max(time, earliest, item.end_time - MAX_LOAD_DURATION), item.end_time - SNAP);
   }
   return Math.max(Math.min(time, item.start_time + MAX_LOAD_DURATION), item.start_time + SNAP);
+}
+
+/**
+ * The window a drag across empty time selects, held to the same rules as the
+ * gestures above: quarter hours, never before `earliest`, 15 minutes to 24
+ * hours. The press stays put and the pointer moves the other edge, so dragging
+ * left of the press sets the start instead of the end.
+ */
+export function dragWindow(press: number, pointer: number, earliest: number): TimeSlot {
+  const fixed = snapNearest(press);
+  const moving = snapNearest(pointer);
+  if (moving >= fixed) {
+    const start = Math.max(fixed, earliest);
+    return { start, end: Math.min(Math.max(moving, start + SNAP), start + MAX_LOAD_DURATION) };
+  }
+  const end = Math.max(fixed, earliest + SNAP);
+  return { start: Math.max(moving, earliest, end - MAX_LOAD_DURATION), end };
 }

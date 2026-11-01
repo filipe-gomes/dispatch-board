@@ -24,8 +24,8 @@ export function BoardLegend() {
         </span>
       </div>
       <p className="hidden lg:ml-auto lg:block">
-        Double-click an empty slot to add a load · drag to reschedule · <Kbd>N</Kbd> new <Kbd>E</Kbd> edit{" "}
-        <Kbd>Del</Kbd> delete
+        Double-click or drag across empty time to add a load · drag a load to reschedule · <Kbd>N</Kbd> new <Kbd>E</Kbd>{" "}
+        edit <Kbd>Del</Kbd> delete
       </p>
     </div>
   );
