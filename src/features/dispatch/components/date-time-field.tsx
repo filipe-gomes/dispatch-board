@@ -39,8 +39,8 @@ export function DateTimeField({ id, value, onChange, disabled, invalid, describe
   };
 
   return (
-    // The date keeps room for its longest form ("Wed, May 20, 2026"); on narrow phones the time wraps below it.
-    <div className="flex flex-wrap gap-2">
+    // Equal halves, spaced like the load form's terminal pickers so the columns line up; stacked on phones.
+    <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -50,7 +50,7 @@ export function DateTimeField({ id, value, onChange, disabled, invalid, describe
             disabled={disabled}
             aria-invalid={invalid || undefined}
             aria-describedby={describedBy}
-            className={cn("h-9 min-w-44 flex-1 justify-start font-normal", !valid && "text-muted-foreground")}
+            className={cn("h-9 w-full justify-start font-normal", !valid && "text-muted-foreground")}
           >
             <CalendarIcon className="text-muted-foreground" />
             <span className="truncate">{valid ? current.format("ddd, MMM D, YYYY") : "Pick a date"}</span>
@@ -67,7 +67,7 @@ export function DateTimeField({ id, value, onChange, disabled, invalid, describe
         disabled={disabled}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
-        className="h-9 w-[8.75rem] shrink-0 tabular-nums"
+        className="h-9 tabular-nums"
         value={valid ? current.format("HH:mm") : ""}
         onChange={(event) => setTime(event.target.value)}
       />
