@@ -78,7 +78,7 @@ src/
 
 ### Compared with the starter sandbox
 
-The sandbox was a class component with inline `Object.assign` updates, `moment`, and no validation. This version uses function components and hooks, a typed domain model, `dayjs` (as the library's 0.30 line requires), immutable updates through a reducer, and a single validation path. It is covered by 69 tests across the rules, scheduling helpers, seed data, reducer and the load form.
+The sandbox was a class component with inline `Object.assign` updates, `moment`, and no validation. This version uses function components and hooks, a typed domain model, `dayjs` (as the library's 0.30 line requires), immutable updates through a reducer, and a single validation path. It is covered by 74 tests across the rules, scheduling helpers, seed data, reducer, load form and drag-to-create.
 
 ## Tech stack
 
